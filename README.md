@@ -1,151 +1,138 @@
-# Домашнее задание к занятию "08.01 Введение в Ansible"
+# Домашнее задание к занятию "08.02 Работа с Playbook"
 
-1. Попробуйте запустить playbook на окружении из `test.yml`, зафиксируйте какое значение имеет факт `some_fact` для указанного хоста при выполнении playbook'a.
+1. Приготовьте свой собственный inventory файл `prod.yml`.
 ```
-TASK [Print fact] **************************************************************************************************************************
-ok: [localhost] => {
-    "msg": "12"
-}
+---
+clickhouse:
+  hosts:
+    clickhouse-01:
+      ansible_host: 172.24.112.1
+      ansible_port: 2222
+      ansible_user: ansible
 ```
-2. Найдите файл с переменными (group_vars) в котором задаётся найденное в первом пункте значение и поменяйте его на 'all default fact'.
+2. Допишите playbook: нужно сделать ещё один play, который устанавливает и настраивает [vector](https://vector.dev).
+3. При создании tasks рекомендую использовать модули: `get_url`, `template`, `unarchive`, `file`.
+4. Tasks должны: скачать нужной версии дистрибутив, выполнить распаковку в выбранную директорию, установить vector.
+5. Запустите `ansible-lint site.yml` и исправьте ошибки, если они есть.
 ```
-1. vi group_vars/all/examp.yml
-2.
-TASK [Print fact] **************************************************************************************************************************
-ok: [localhost] => {
-    "msg": "all default fact"
-}
+$ ansible-lint site.yml
+WARNING  Overriding detected file kind 'yaml' with 'playbook' for given positional argument: site.yml
 ```
-3. Воспользуйтесь подготовленным (используется `docker`) или создайте собственное окружение для проведения дальнейших испытаний.  
-`docker-compose.yml` в корне репозитория.
-4. Проведите запуск playbook на окружении из `prod.yml`. Зафиксируйте полученные значения `some_fact` для каждого из `managed host`.
+6. Попробуйте запустить playbook на этом окружении с флагом `--check`.
 ```
-TASK [Print fact] **************************************************************************************************************************
-ok: [centos7] => {
-    "msg": "el"
-}
-ok: [ubuntu] => {
-    "msg": "deb"
-}
-```
-5. Добавьте факты в `group_vars` каждой из групп хостов так, чтобы для `some_fact` получились следующие значения: для `deb` - 'deb default fact', для `el` - 'el default fact'.
-```
-vi group_vars/el/examp.yml
-vi group_vars/deb/examp.yml
-```
-6.  Повторите запуск playbook на окружении `prod.yml`. Убедитесь, что выдаются корректные значения для всех хостов.
-```
-TASK [Print fact] **************************************************************************************************************************
-ok: [centos7] => {
-    "msg": "el default fact"
-}
-ok: [ubuntu] => {
-    "msg": "deb default fact"
-}
-```
-7. При помощи `ansible-vault` зашифруйте факты в `group_vars/deb` и `group_vars/el` с паролем `netology`.
-```
-$ ansible-vault encrypt group_vars/deb/examp.yml
-New Vault password:
-Confirm New Vault password:
-Encryption successful
-$ ansible-vault encrypt group_vars/el/examp.yml
-New Vault password:
-Confirm New Vault password:
-Encryption successful
-```
-8. Запустите playbook на окружении `prod.yml`. При запуске `ansible` должен запросить у вас пароль. Убедитесь в работоспособности.
-```
-$ ansible-playbook --ask-vault-pass -i inventory/prod.yml site.yml
-Vault password:
+$ ansible-playbook -i inventory/ site.yml --private-key=id_rsa --check
 
-PLAY [Print os facts] **********************************************************************************************************************
+PLAY [Install Clickhouse] **********************************************************************************************************************
 
-TASK [Gathering Facts] *********************************************************************************************************************
-ok: [ubuntu]
-ok: [centos7]
+TASK [Gathering Facts] *************************************************************************************************************************
+ok: [clickhouse-01]
 
-TASK [Print OS] ****************************************************************************************************************************
-ok: [centos7] => {
-    "msg": "CentOS"
-}
-ok: [ubuntu] => {
-    "msg": "Ubuntu"
-}
+TASK [Get clickhouse distrib] ******************************************************************************************************************
+ok: [clickhouse-01] => (item=clickhouse-client)
+ok: [clickhouse-01] => (item=clickhouse-server)
+ok: [clickhouse-01] => (item=clickhouse-common-static)
 
-TASK [Print fact] **************************************************************************************************************************
-ok: [centos7] => {
-    "msg": "el default fact"
-}
-ok: [ubuntu] => {
-    "msg": "deb default fact"
-}
+TASK [Install clickhouse packages] *************************************************************************************************************
+changed: [clickhouse-01]
 
-PLAY RECAP *********************************************************************************************************************************
-centos7                    : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-ubuntu                     : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-```
-9. Посмотрите при помощи `ansible-doc` список плагинов для подключения. Выберите подходящий для работы на `control node`.
-Нам подходит плагин `local`.
-```
-$ ansible-doc -t connection -l
-community.docker.docker     Run tasks in docker containers
-community.docker.docker_api Run tasks in docker containers
-community.docker.nsenter    execute on host running controller container
-local                       execute on controller
-paramiko_ssh                Run tasks via python ssh (paramiko)
-psrp                        Run tasks over Microsoft PowerShell Remoting Protocol
-ssh                         connect via SSH client binary
-winrm                       Run tasks over Microsoft's WinRM
-```
-10. В `prod.yml` добавьте новую группу хостов с именем  `local`, в ней разместите localhost с необходимым типом подключения.
-```
-  local:
-    hosts:
-      localhost:
-        ansible_host: localhost
-        ansible_connection: local
-```
-11. Запустите playbook на окружении `prod.yml`. При запуске `ansible` должен запросить у вас пароль. Убедитесь что факты `some_fact` для каждого из хостов определены из верных `group_vars`.
-```
-$ ansible-playbook --ask-vault-pass -i inventory/prod.yml site.yml
-Vault password:
+TASK [Create database] *************************************************************************************************************************
+skipping: [clickhouse-01]
 
-PLAY [Print os facts] **************************************************************************************************
+PLAY [Install Vector] **************************************************************************************************************************
+
+TASK [Gathering Facts] *************************************************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Get vector distrib] **********************************************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Install Vector packages] *****************************************************************************************************************
+changed: [clickhouse-01]
+
+PLAY RECAP *************************************************************************************************************************************
+clickhouse-01              : ok=6    changed=2    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+```
+7. Запустите playbook на `prod.yml` окружении с флагом `--diff`. Убедитесь, что изменения на системе произведены.
+```
+$ ansible-playbook -i inventory/ site.yml --private-key=id_rsa --diff
+
+PLAY [Install Clickhouse] **********************************************************************************************
 
 TASK [Gathering Facts] *************************************************************************************************
-ok: [localhost]
-ok: [ubuntu]
-ok: [centos7]
+ok: [clickhouse-01]
 
-TASK [Print OS] ********************************************************************************************************
-ok: [centos7] => {
-    "msg": "CentOS"
-}
-ok: [ubuntu] => {
-    "msg": "Ubuntu"
-}
-ok: [localhost] => {
-    "msg": "Ubuntu"
-}
+TASK [Get clickhouse distrib] ******************************************************************************************
+ok: [clickhouse-01] => (item=clickhouse-client)
+ok: [clickhouse-01] => (item=clickhouse-server)
+ok: [clickhouse-01] => (item=clickhouse-common-static)
 
-TASK [Print fact] ******************************************************************************************************
-ok: [centos7] => {
-    "msg": "el default fact"
-}
-ok: [ubuntu] => {
-    "msg": "deb default fact"
-}
-ok: [localhost] => {
-    "msg": "all default fact"
-}
+TASK [Install clickhouse packages] *************************************************************************************
+changed: [clickhouse-01]
+
+TASK [Create database] *************************************************************************************************
+ok: [clickhouse-01]
+
+RUNNING HANDLER [Start clickhouse service] *****************************************************************************
+changed: [clickhouse-01]
+
+PLAY [Install Vector] **************************************************************************************************
+
+TASK [Gathering Facts] *************************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Get vector distrib] **********************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Install Vector packages] *****************************************************************************************
+changed: [clickhouse-01]
+
+RUNNING HANDLER [Start vector service] *********************************************************************************
+changed: [clickhouse-01]
 
 PLAY RECAP *************************************************************************************************************
-centos7                    : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-localhost                  : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-ubuntu                     : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+clickhouse-01              : ok=9    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+8. Повторно запустите playbook с флагом `--diff` и убедитесь, что playbook идемпотентен.
+```
+$ ansible-playbook -i inventory/ site.yml --private-key=id_rsa --diff
 
-12. Заполните `README.md` ответами на вопросы. Сделайте `git push` в ветку `master`. В ответе отправьте ссылку на ваш открытый репозиторий с изменённым `playbook` и заполненным `README.md`.
-Сделано :)
+PLAY [Install Clickhouse] **********************************************************************************************
 
+TASK [Gathering Facts] *************************************************************************************************
+ok: [clickhouse-01]
 
+TASK [Get clickhouse distrib] ******************************************************************************************
+ok: [clickhouse-01] => (item=clickhouse-client)
+ok: [clickhouse-01] => (item=clickhouse-server)
+ok: [clickhouse-01] => (item=clickhouse-common-static)
+
+TASK [Install clickhouse packages] *************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Create database] *************************************************************************************************
+ok: [clickhouse-01]
+
+PLAY [Install Vector] **************************************************************************************************
+
+TASK [Gathering Facts] *************************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Get vector distrib] **********************************************************************************************
+ok: [clickhouse-01]
+
+TASK [Install Vector packages] *****************************************************************************************
+ok: [clickhouse-01]
+
+PLAY RECAP *************************************************************************************************************
+clickhouse-01              : ok=7    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+9. Подготовьте README.md файл по своему playbook. В нём должно быть описано: что делает playbook, какие у него есть параметры и теги.
+10. Готовый playbook выложите в свой репозиторий, поставьте тег `08-ansible-02-playbook` на фиксирующий коммит, в ответ предоставьте ссылку на него.
+
+---
+
+### Как оформить ДЗ?
+
+Выполненное домашнее задание пришлите ссылкой на .md-файл в вашем репозитории.
+
+---

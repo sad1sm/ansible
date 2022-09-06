@@ -2,29 +2,26 @@
 - name: Install Clickhouse
   hosts: clickhouse
   handlers:
+
     - name: Start clickhouse service
       become: true
       ansible.builtin.sysvinit:
         name: clickhouse-server
         state: restarted
+
   tasks:
-    - name: Get clickhouse distrib
-      ansible.builtin.get_url:
-        url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.x86_64.rpm"
-        dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
-        validate_certs: false
-        mode: 0755
-      with_items: "{{ clickhouse_packages }}"
-      check_mode: false
-    - name: Install clickhouse packages
+
+    - name: Install clickhouse distrib
       become: true
       ansible.builtin.yum:
-        name:
-          - clickhouse-common-static-{{ clickhouse_version }}.rpm
-          - clickhouse-client-{{ clickhouse_version }}.rpm
-          - clickhouse-server-{{ clickhouse_version }}.rpm
+        name: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.x86_64.rpm"
         disable_gpg_check: true
+      with_items: "{{ clickhouse_packages }}"
       notify: Start clickhouse service
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
     - name: Create database
       ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
       register: create_db
@@ -32,25 +29,82 @@
       changed_when: create_db.rc == 0
 
 - name: Install Vector
-  hosts: clickhouse
+  hosts: vector
   handlers:
+
     - name: Start vector service
       become: true
       ansible.builtin.service:
         name: vector
         state: restarted
+
   tasks:
-    - name: Get vector distrib
-      ansible.builtin.get_url:
-        url: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-1.x86_64.rpm"
-        dest: "./vector-{{ vector_version }}-1.x86_64.rpm"
-        mode: 0755
-        validate_certs: false
-      check_mode: false
-    - name: Install Vector packages
+
+    - name: Install Vector package
+      become: true
+      ansible.builtin.yum:
+        name: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-1.x86_64.rpm"
+        disable_gpg_check: true
+
+    - name: Configure Vector
+      become: true
+      ansible.builtin.template:
+        src: vector.toml.j2
+        dest: /etc/vector/vector.toml
+        mode: 0644
+        validate: vector validate --no-environment --config-toml %s
+
+    - name: Creates directory
+      become: true
+      ansible.builtin.file:
+        path: /var/lib/vector/local_logs
+        state: directory
+        mode: 0644
+      notify: Start vector service
+
+- name: Install Lighthouse
+  hosts: lighthouse
+  handlers:
+
+    - name: Start nginx service
+      become: true
+      ansible.builtin.service:
+        name: nginx
+        state: started
+
+  tasks:
+
+    - name: Install epel-release
+      become: true
+      ansible.builtin.yum:
+        name: epel-release
+        state: present
+
+    - name: Install Nginx and Git
       become: true
       ansible.builtin.yum:
         name:
-          - vector-{{ vector_version }}-1.x86_64.rpm
-        disable_gpg_check: true
-      notify: Start vector service
+          - nginx
+          - git
+        state: present
+
+    - name: Configure Nginx
+      become: true
+      ansible.builtin.template:
+        src: "templates/nginx.conf.j2"
+        dest: "/etc/nginx/nginx.conf"
+        mode: 0755
+
+    - name: Configure Nginx Lighthouse webserver
+      become: true
+      ansible.builtin.template:
+        src: "templates/lighthouse.conf.j2"
+        dest: "/etc/nginx/conf.d/default.conf"
+        mode: 0644
+      notify: Start nginx service
+
+    - name: Clone Lighthouse repository
+      ansible.builtin.git:
+        repo: "{{ lighthouse_repo }}"
+        version: master
+        dest: "{{ lighthouse_home }}"

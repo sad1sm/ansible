@@ -1,0 +1,3 @@
+lighthouse_repo: https://github.com/VKCOM/lighthouse.git
+lighthouse_home: /home/{{ ansible_user }}/lighthouse
+nginx_log: lighthouse

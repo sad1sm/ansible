@@ -1,6 +1,1 @@
 ---
-clickhouse_version: "22.7.1.2484"
-clickhouse_packages:
-  - clickhouse-common-static
-  - clickhouse-client
-  - clickhouse-server

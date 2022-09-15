@@ -1,0 +1,6 @@
+- src: git+ssh://git@github.com/sad1sm/vector-role.git
+  version: main
+- src: git+ssh://git@github.com/sad1sm/lighthouse-role.git
+  version: main
+- src: git+ssh://git@github.com/sad1sm/clickhouse-role.git
+  version: main
